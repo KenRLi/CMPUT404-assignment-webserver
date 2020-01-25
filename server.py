@@ -37,28 +37,42 @@ class MyWebServer(socketserver.BaseRequestHandler):
         # Parse client headers
         headers = [header.split(" ") for header in self.data.decode().split("\r\n")]
 
-        print(headers)
-
         self.method = headers[0][0]
         self.path = headers[0][1]
         self.protocol = headers[0][2]
 
         # Only accept GET methods
         if (self.method == "GET"):
+            # Default status, may get replaced
+            statusCode = HTTPStatus.OK
+
             # Builds path requested by client, ignoring redundant separators and up-level references
             BASEPATH = os.getcwd() + "/www"
             requestedPath = os.path.normpath(BASEPATH + self.path)
-
+            
+            print(self.path)
             print(requestedPath)
 
-            # Return index.html for paths that end in "/"
-            if (self.path[-1] == "/"):
-                requestedPath += "/index.html"
+            # Path given is correct directory but missing /, add /
+            if (os.path.isdir(requestedPath) and requestedPath[-1] != "/"):
+                requestedPath += "/"
+                statusCode = HTTPStatus.MOVED_PERMANENTLY
+            
+            print(self.path)
+            print(requestedPath)
+
+            # Return index.html for paths that end in "/" and index.html exist
+            if (requestedPath[-1] == "/" and os.path.isfile(requestedPath + "index.html")):
+                self.path += "index.html"
+                requestedPath += "index.html"
+                statusCode = HTTPStatus.MOVED_PERMANENTLY
+
+            print(self.path)
+            print(requestedPath)
 
             # Check if requested path is a file
             if (os.path.isfile(requestedPath)):
                 # File Found
-                statusCode = HTTPStatus.OK
                 content = open(requestedPath, "r").read()
                 self.sendRequest(statusCode, content)
 
@@ -76,25 +90,29 @@ class MyWebServer(socketserver.BaseRequestHandler):
         _, fileExt = os.path.splitext(self.path)
 
         if (fileExt.upper() == ".HTML"):
-            return "Content-Type: text/html\r\n\r\n"
+            return "Content-Type: text/html\r\n"
         elif (fileExt.upper() == ".CSS"):
-            return "Content-Type: text/css\r\n\r\n"
+            return "Content-Type: text/css\r\n"
         else:
-            return "Content-Type: text/html\r\n\r\n"
+            return "Content-Type: text/html\r\n"
 
     def sendRequest(self, statusCode, content):
+        # Default Response
         tempContent = open("./templates/501.html", "r").read()
-        response = self.protocol + "501 Not Implemented\r\n" + self.getMimeType() + tempContent
+        response = self.protocol + "501 Not Implemented\r\n" + self.getMimeType() + tempContent + "\r\n\r\n"
         
         if (statusCode == HTTPStatus.OK):
             print("200")
-            response = self.protocol + "200 OK\r\n" + self.getMimeType() + content
+            response = self.protocol + "200 OK\r\n" + self.getMimeType() + content + "\r\n\r\n"
+        elif (statusCode == HTTPStatus.MOVED_PERMANENTLY):
+            print("301")
+            response = self.protocol + "301 Moved Permanently\r\n" + self.getMimeType() + "Location: " + self.path + "\r\n\r\n"
         elif (statusCode == HTTPStatus.NOT_FOUND):
             print("404")
-            response = self.protocol + "404 Not Found\r\n" + self.getMimeType() + content
+            response = self.protocol + "404 Not Found\r\n" + self.getMimeType() + content + "\r\n\r\n"
         elif (statusCode == HTTPStatus.METHOD_NOT_ALLOWED):
             print("405")
-            response = self.protocol + "405 Method Not Allowed\r\n" + self.getMimeType() + content
+            response = self.protocol + "405 Method Not Allowed\r\n" + self.getMimeType() + content + "\r\n\r\n"
 
         self.request.sendall(bytearray(response, 'utf-8'))
         
